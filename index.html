@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>一笑羽毛球 · 排课工具</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar__inner">
+    <h1 class="topbar__title" id="app-title">一笑羽毛球</h1>
+    <button class="topbar__gear" id="btn-settings" type="button" aria-label="设置"></button>
+  </div>
+</header>
+
+<main id="app-main"></main>
+
+<nav class="tabbar" id="app-nav"></nav>
+
+<div id="toast" class="toast-box"></div>
+
+<!-- 脚本顺序 = 依赖顺序，不要调换。
+     注意：这里必须用传统 <script src>，不能用 ES module。
+     因为 file:// 打开时浏览器会用 CORS 拦掉模块，改成 module 就打不开了。 -->
+<script src="js/core.js"></script>
+<script src="js/config.js"></script>
+<script src="js/store.js"></script>
+<script src="js/rules.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/notify.js"></script>
+<script src="js/page-home.js"></script>
+<script src="js/page-parent.js"></script>
+<script src="js/page-students.js"></script>
+<script src="js/page-intake.js"></script>
+<script src="js/page-schedule.js"></script>
+<script src="js/page-calendar.js"></script>
+<script src="js/page-links.js"></script>
+<script src="js/page-guide.js"></script>
+<script src="js/page-settings.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>
