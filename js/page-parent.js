@@ -36,6 +36,19 @@
       '</div></div>';
   }
 
+  // 云端报错（连不上 / 配置错 / 数据没传上去）和家长口令错要区分开，方便排查
+  function renderCloudError(root, msg) {
+    root.innerHTML = '<div class="parent">' +
+      '<div class="card parent__card">' +
+        '<div class="parent__sorry">' +
+          '<h3>暂时打不开</h3>' +
+          '<p class="muted">孩子的课表没能从云端取到。可能是教练端还没把数据上传到云端，' +
+          '或网络暂时不通。麻烦稍后重试，或让教练重新发一下链接。</p>' +
+          (msg ? '<p class="muted" style="margin-top:8px;opacity:.7">技术信息：' + BC.util.escapeHtml(msg) + '</p>' : '') +
+        '</div>' +
+      '</div></div>';
+  }
+
   /* ---------- 页面入口 ---------- */
   function renderParent(root, token, q) {
     curQ = q || '';
@@ -78,7 +91,8 @@
             '<h3>正在加载…</h3><p class="muted">正在获取孩子的课表，请稍等。</p>' +
           '</div></div></div>';
         BC.cloud.pullParent(token, function (err, data) {
-          if (err || !data || !data.student) { renderInvalid(root); return; }
+          if (err) { renderCloudError(root, err.message); return; }
+          if (!data || !data.student) { renderInvalid(root); return; }
           var K = BC.store.KEYS;
           BC.store.mergeIn(K.students, [data.student]);
           BC.store.mergeIn(K.lessons, data.lessons || []);

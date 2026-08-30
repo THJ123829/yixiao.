@@ -13,6 +13,11 @@
     requests: 'bc.requests.v1'
   };
 
+  // 本地存储键（bc.students.v1）→ 云端逻辑表名（students）。
+  // 一定要分清两者：云端表名是 Supabase 里 tbl 字段的值，不能直接拿 storage 的 key 去用，
+  // 否则学员会被存到 tbl='bc.students.v1'，家长端按 tbl='students' 查就永远查不到 → 链接显示无效。
+  function tblOf(key) { return key.replace(/^bc\./, '').replace(/\.v1$/, ''); }
+
   /* ---------- 底层读写 ---------- */
   function readTable(key) {
     try {
@@ -50,7 +55,7 @@
         row.createdAt = new Date().toISOString();
         arr.push(row);
         writeTable(key, arr);
-        cloud.push(key, row);
+        cloud.push(tblOf(key), row);
         return row;
       },
 
@@ -63,20 +68,20 @@
           return hit;
         });
         writeTable(key, arr);
-        if (hit) cloud.push(key, hit);
+        if (hit) cloud.push(tblOf(key), hit);
         return hit;
       },
 
       remove: function (id) {
         var arr = readTable(key).filter(function (r) { return r.id !== id; });
         writeTable(key, arr);
-        cloud.removeRow(key, id);
+        cloud.removeRow(tblOf(key), id);
         return true;
       },
 
       replaceAll: function (arr) {
         writeTable(key, arr);
-        (arr || []).forEach(function (row) { cloud.push(key, row); });
+        (arr || []).forEach(function (row) { cloud.push(tblOf(key), row); });
       }
     };
   }
@@ -200,7 +205,8 @@
       fetch(cloud.cfg().url + '/rest/v1/bc_rows?select=data&tbl=eq.' + encodeURIComponent(tbl), {
         headers: cloud.headers()
       }).then(function (r) {
-        return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
+        if (r.ok) return r.json();
+        return r.text().then(function (t) { return Promise.reject(new Error('HTTP ' + r.status + '：' + t)); });
       }).then(function (rows) {
         cb(null, (rows || []).map(function (r) { return r.data; }));
       }).catch(function (e) { cb(e, null); });
@@ -219,7 +225,7 @@
 
       function get(qs) {
         return fetch(base + qs, { headers: cloud.headers() })
-          .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)); });
+          .then(function (r) { if (r.ok) return r.json(); return r.text().then(function (t) { return Promise.reject(new Error('HTTP ' + r.status + '：' + t)); }); });
       }
 
       // 1) 云端按口令过滤，只取回这一个孩子
@@ -298,7 +304,8 @@
         headers: cloud.headers({ 'Prefer': 'resolution=merge-duplicates,return=minimal' }),
         body: JSON.stringify(payload)
       }).then(function (r) {
-        cb && cb(r.ok ? null : new Error('HTTP ' + r.status));
+        if (r.ok) { cb && cb(null); return; }
+        return r.text().then(function (t) { cb && cb(new Error('HTTP ' + r.status + '：' + t)); });
       }).catch(function (e) { cb && cb(e); });
     },
 
