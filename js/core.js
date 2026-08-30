@@ -28,8 +28,26 @@
     return d.getFullYear() + '-' + util.pad2(d.getMonth() + 1) + '-' + util.pad2(d.getDate());
   };
 
+  /* 把各种常见写法统一成 'YYYY-MM-DD'。
+   * 为什么要这个：手机或 Excel 里常会填成 20270830、2027/8/30 这种，
+   * 直接 split('-') 会算出 NaN，导致"还剩几天""到期提醒"全部失效。 */
+  util.normalizeISO = function (v) {
+    var s = String(v == null ? '' : v).trim();
+    if (!s) return '';
+    // 注意：正则抓到的是字符串，必须先转成数字再补零，
+    // 否则 '08' 会被误判成需要补零，变成 '008'。
+    function p2(x) { var n = Number(x); return (n < 10 ? '0' : '') + n; }
+    var m = s.match(/^(\d{4})(\d{2})(\d{2})$/);                     // 20270830
+    if (m) return m[1] + '-' + m[2] + '-' + m[3];
+    m = s.match(/^(\d{4})[-/.年]\s*(\d{1,2})[-/.月]\s*(\d{1,2})/);  // 2027-8-30 / 2027/08/30
+    if (m) return m[1] + '-' + p2(m[2]) + '-' + p2(m[3]);
+    return s;
+  };
+
+  util.isISO = function (v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '').trim()); };
+
   util.parseISO = function (iso) {
-    var p = String(iso || '').split('-');
+    var p = util.normalizeISO(iso).split('-');
     return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
   };
 

@@ -75,6 +75,68 @@
     };
   }
 
+  /* ============================================================
+   * 家长链接的"快照"打包：把孩子的资料和课表压进网址
+   *
+   * 为什么用 base64 而不是 encodeURIComponent：后者会把一个汉字变成 9 个字符
+   * （"小" → %E5%B0%8F），base64 只占 4 个，中文内容能省一半以上。
+   * 再加上只保留家长端真正用得上的字段，链接长度能压到原来的 1/3 左右。
+   *
+   * 两个字段不能省：
+   *   status     —— 提醒判断要用（不是"在读"就一条提醒都不显示）
+   *   notifiedAt —— "超时默认确认"要用（丢了会一直显示成待确认）
+   * ============================================================ */
+  function studentLessons(student) {
+    return store.lessons.all().filter(function (l) {
+      return (l.studentIds || []).indexOf(student.id) >= 0;
+    });
+  }
+
+  // UTF-8 → base64 → URL 安全字符（避免 + / = 在网址里出问题）
+  function utf8ToUrlB64(str) {
+    var bytes, i, c;
+    if (global.TextEncoder) {
+      bytes = new global.TextEncoder().encode(str);
+    } else {
+      bytes = [];
+      for (i = 0; i < str.length; i++) {
+        c = str.charCodeAt(i);
+        if (c < 128) bytes.push(c);
+        else if (c < 2048) bytes.push(192 | c >> 6, 128 | c & 63);
+        else bytes.push(224 | c >> 12, 128 | (c >> 6) & 63, 128 | c & 63);
+      }
+    }
+    var bin = '';
+    for (i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return global.btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  function encodeSnapshot(student, lessons) {
+    var pack = {
+      // s = 学员；字段名压到 1~2 个字母，链接短很多
+      s: {
+        i: student.id, n: student.name, a: student.age, c: student.courseType,
+        r: student.remainingLessons, v: student.validUntil, st: student.status
+      },
+      // l = 这个孩子要上的课
+      l: lessons.map(function (l) {
+        var o = {
+          i: l.id, d: l.date, s: l.slotId, c: l.courtId,
+          y: l.courseType, st: l.status, m: l.isMakeup ? 1 : 0
+        };
+        var f = (l.confirmations || {})[student.id];
+        if (f) o.f = f;            // 只带这个孩子自己的确认状态
+        // 时间戳存成毫秒数字，比 ISO 字符串（24 字符）短很多
+        if (l.notifiedAt) o.n = new Date(l.notifiedAt).getTime();
+        return o;
+      })
+    };
+    return utf8ToUrlB64(JSON.stringify(pack));
+  }
+
+  BC.encodeSnapshot = encodeSnapshot;   // 供测试与复用
+  BC.studentLessons = studentLessons;
+
   var store = BC.store = {
     KEYS: KEYS,
     students: makeTable(KEYS.students),
@@ -124,11 +186,7 @@
       // v1 没有云数据库：把孩子的资料 + 属于他的课表「打包」进链接，
       // 这样家长用任何手机打开都能看到自己孩子——不用服务器、不花钱。
       try {
-        var myLessons = store.lessons.all().filter(function (l) {
-          return (l.studentIds || []).indexOf(student.id) >= 0;
-        });
-        var payload = { s: student, l: myLessons };
-        href += '?d=' + encodeURIComponent(JSON.stringify(payload));
+        href += '?d=c1' + encodeSnapshot(student, studentLessons(student));
       } catch (e) { /* 打包失败就退回纯 token 链接（同浏览器内仍可用） */ }
       return href;
     },

@@ -38,8 +38,16 @@
         var m = String(curQ).match(/d=([^&]+)/);
         if (m) {
           try {
-            var p = JSON.parse(decodeURIComponent(m[1]));
-            if (p && p.s && p.s.token === token) {
+            var raw = m[1], p = null;
+            if (raw.indexOf('c1') === 0) {
+              // 新格式：短字段名 + URL 安全 base64，链接短很多
+              p = expandSnapshot(decodeUrlB64(raw.slice(2)), token);
+            } else {
+              // 老格式（早期已经发给家长的链接），保持兼容，别让人家打不开
+              p = JSON.parse(decodeURIComponent(raw));
+              if (!p || !p.s || p.s.token !== token) p = null;
+            }
+            if (p && p.s) {
               student = p.s;
               embeddedLessons = overlayLocal(p.l || []);
               snapCache[token] = { s: student, l: embeddedLessons };
@@ -87,6 +95,42 @@
 
   /* ---------- 课表数据源：优先用链接里的快照（家长手机无本地数据时） ---------- */
   function lessonsAll() { return embeddedLessons || BC.store.lessons.all(); }
+
+  /* ---------- 解开链接里的快照 ---------- */
+  function decodeUrlB64(b64) {
+    var s = b64.replace(/-/g, '+').replace(/_/g, '/');
+    while (s.length % 4) s += '=';
+    var bin = global.atob(s);
+    if (global.TextDecoder) {
+      var bytes = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new global.TextDecoder().decode(bytes);
+    }
+    return decodeURIComponent(escape(bin));
+  }
+
+  // 把压缩过的快照还原成页面能直接用的学员 / 课表对象
+  function expandSnapshot(text, token) {
+    var p = JSON.parse(text);
+    if (!p || !p.s) return null;
+    var s = p.s;
+    var student = {
+      id: s.i, name: s.n, age: s.a, courseType: s.c,
+      remainingLessons: s.r, validUntil: s.v, status: s.st,
+      token: token                 // 口令本来就在网址里，不用重复打包
+    };
+    var lessons = (p.l || []).map(function (x) {
+      var conf = {};
+      if (x.f) conf[student.id] = x.f;
+      return {
+        id: x.i, date: x.d, slotId: x.s, courtId: x.c, courseType: x.y,
+        status: x.st, isMakeup: !!x.m,
+        notifiedAt: x.n ? new Date(x.n).toISOString() : null,
+        confirmations: conf, studentIds: [student.id]
+      };
+    });
+    return { s: student, l: lessons };
+  }
 
   /* 快照以教练发来的为准，但家长本机已做的确认要盖上去，这样刷新后不会丢 */
   function overlayLocal(lessons) {

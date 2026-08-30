@@ -17,6 +17,13 @@
       var v = data[f.key];
       var empty = (v === '' || v === null || v === undefined);
 
+      // 日期自动扶正：20270830、2027/8/30 这类写法直接改成 2027-08-30，
+      // 不用教练手动改，也避免存进去后"还剩几天"算成 NaN。
+      if (!empty && f.type === 'date') {
+        v = util.normalizeISO(v);
+        data[f.key] = v;
+      }
+
       if (f.required && empty) { errors.push(f.label + '不能为空'); return; }
       if (empty) return;
 

@@ -173,6 +173,11 @@
         {
           label: '保存', kind: 'primary', onClick: function () {
             var data = ui.readForm(fields(), 'stu');
+            // 日期写法容错：20270830 / 2027/8/30 → 2027-08-30。
+            // 必须改 data 本身，编辑时校验拿到的是副本，只改副本存回去还是错的。
+            fields().forEach(function (f) {
+              if (f.type === 'date' && data[f.key]) data[f.key] = util.normalizeISO(data[f.key]);
+            });
             var check = BC.rules.validateStudent(
               editing ? Object.assign({ id: editing.id }, data) : data
             );
