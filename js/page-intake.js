@@ -151,13 +151,14 @@
         var id = a.getAttribute('data-copy');
         var s = BC.store.students.find(id);
         if (!s) return;
-        var link = BC.store.parentLink(s);
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(link).then(
-            function () { ui.toast('「' + s.name + '」的家长链接已复制'); },
-            function () { showLink(link, s.name); }
-          );
-        } else showLink(link, s.name);
+        BC.store.parentLinkSmart(s, function (link) {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(link).then(
+              function () { ui.toast('「' + s.name + '」的家长链接已复制'); },
+              function () { showLink(link, s.name); }
+            );
+          } else showLink(link, s.name);
+        });
       });
     });
   }

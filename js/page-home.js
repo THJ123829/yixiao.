@@ -368,54 +368,60 @@
       });
     });
 
-    // 通知一节课的所有家长
+    // 通知一节课的所有家长（链接能短就短：云端读得到就发短链）
     root.querySelectorAll('[data-notify]').forEach(function (b) {
       b.addEventListener('click', function () {
         var id = b.getAttribute('data-notify');
         var l = BC.store.lessons.find(id);
         if (!l) return;
-        var lines = BC.notify.lessonTexts(l).map(function (x) {
-          // 家长链接放在话术末尾，家长点开就能确认
-          var s = BC.store.students.find(x.studentId);
-          var link = s ? BC.store.parentLink(s) : '';
-          return { name: x.name, text: x.text + (link ? '\n' + link : '') };
+        BC.cloud.selfCheck(function (err, checked) {
+          var lines = BC.notify.lessonTexts(l).map(function (x) {
+            // 家长链接放在话术末尾，家长点开就能确认
+            var s = BC.store.students.find(x.studentId);
+            var link = s ? BC.store.parentLinkFor(checked, s) : '';
+            return { name: x.name, text: x.text + (link ? '\n' + link : '') };
+          });
+          BC.notify.show('排课通知', lines, function () {
+            BC.store.lessons.update(id, { notifiedAt: new Date().toISOString() });
+          });
+          render(root);
         });
-        BC.notify.show('排课通知', lines, function () {
-          BC.store.lessons.update(id, { notifiedAt: new Date().toISOString() });
-        });
-        render(root);
       });
     });
 
-    // 课前提醒：给一节课的家长各生成一段提醒话术
+    // 课前提醒：给一节课的家长各生成一段提醒话术（链接能短就短）
     root.querySelectorAll('[data-class-remind]').forEach(function (b) {
       b.addEventListener('click', function () {
         var id = b.getAttribute('data-class-remind');
         var l = BC.store.lessons.find(id);
         if (!l) return;
-        var lines = (l.studentIds || []).map(function (sid) {
-          var s = BC.store.students.find(sid);
-          if (!s) return null;
-          return { name: s.name, text: BC.notify.classReminderText(l, s) + '\n' + BC.store.parentLink(s) };
-        }).filter(function (x) { return !!x; });
-        BC.notify.show('上课提醒', lines, function () {
-          BC.store.lessons.update(id, { classRemindedAt: new Date().toISOString() });
+        BC.cloud.selfCheck(function (err, checked) {
+          var lines = (l.studentIds || []).map(function (sid) {
+            var s = BC.store.students.find(sid);
+            if (!s) return null;
+            return { name: s.name, text: BC.notify.classReminderText(l, s) + '\n' + BC.store.parentLinkFor(checked, s) };
+          }).filter(function (x) { return !!x; });
+          BC.notify.show('上课提醒', lines, function () {
+            BC.store.lessons.update(id, { classRemindedAt: new Date().toISOString() });
+          });
+          render(root);
         });
-        render(root);
       });
     });
 
-    // 单个学员的催办话术
+    // 单个学员的催办话术（链接能短就短）
     root.querySelectorAll('[data-msg]').forEach(function (b) {
       b.addEventListener('click', function () {
         var id = b.getAttribute('data-stu');
         var kind = b.getAttribute('data-msg');
         var s = BC.store.students.find(id);
         if (!s) return;
-        var text = (kind === 'low') ? BC.notify.lowBalanceText(s) : BC.notify.expiringText(s);
-        var link = BC.store.parentLink(s);
-        BC.notify.show(kind === 'low' ? '课时不足提醒' : '即将到期提醒',
-          [{ name: s.name, text: text + (link ? '\n' + link : '') }]);
+        BC.cloud.selfCheck(function (err, checked) {
+          var text = (kind === 'low') ? BC.notify.lowBalanceText(s) : BC.notify.expiringText(s);
+          var link = BC.store.parentLinkFor(checked, s);
+          BC.notify.show(kind === 'low' ? '课时不足提醒' : '即将到期提醒',
+            [{ name: s.name, text: text + (link ? '\n' + link : '') }]);
+        });
       });
     });
   }

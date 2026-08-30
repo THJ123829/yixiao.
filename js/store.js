@@ -521,6 +521,27 @@
       return href;
     },
 
+    /* 依据一次「云端自检」结果，给单个学员生成「能短就短」的链接（同步）。
+     * checked 来自 BC.cloud.selfCheck 的回调；云端读得到这孩子就发短链，
+     * 否则发带资料的长链（一定打得开）。通知话术、复制链接都复用它，不重复写判断。 */
+    parentLinkFor: function (checked, student) {
+      var okT = (checked && checked.readable && checked.cloudTokens) || null;
+      var canShort = !!(okT && student.token && okT[student.token]);
+      return BC.store.parentLink(student, false, canShort ? { short: true } : null);
+    },
+
+    /* 「能短就短」的家长链接（异步：要先判断云端是否读得通）。
+     * 复制链接等单点场景直接用它，而不是固定生成长链。
+     * 本机没配云端时 selfCheck 同步返回，无网络延迟；30 秒内复用同一次检测结果。 */
+    parentLinkSmart: function (student, cb) {
+      var c = BC.store._linkCheck;
+      if (c && (Date.now() - c.at) < 30000) { cb(BC.store.parentLinkFor(c.res, student)); return; }
+      BC.cloud.selfCheck(function (err, res) {
+        BC.store._linkCheck = { at: Date.now(), res: res };
+        cb(BC.store.parentLinkFor(res, student));
+      });
+    },
+
     /* ---------- 备份：导出成一段文本，可存到别处 ---------- */
     exportAll: function () {
       return JSON.stringify({

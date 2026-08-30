@@ -205,14 +205,15 @@
   function shareLink(id) {
     var s = BC.store.students.find(id);
     if (!s) return;
-    var link = BC.store.parentLink(s);
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(link).then(function () {
-        ui.toast('「' + s.name + '」的家长链接已复制，发给家长即可');
-      }, function () { showLinkFallback(link, s.name); });
-    } else {
-      showLinkFallback(link, s.name);
-    }
+    BC.store.parentLinkSmart(s, function (link) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(link).then(function () {
+          ui.toast('「' + s.name + '」的家长链接已复制，发给家长即可');
+        }, function () { showLinkFallback(link, s.name); });
+      } else {
+        showLinkFallback(link, s.name);
+      }
+    });
   }
 
   function showLinkFallback(link, name) {
