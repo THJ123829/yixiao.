@@ -145,6 +145,15 @@
       gear.addEventListener('click', function () { location.hash = '#/settings'; });
     }
     route();
+
+    // 接了云端就把最新数据拉回来再重画一次。
+    // 家长端不拉全部——只拉自己孩子的（见 page-parent.js），免得全班信息下到别人手机上。
+    var isParent = /^#\/parent\//.test(global.location.hash || '');
+    if (!isParent && BC.cloud && BC.cloud.on()) {
+      // 时段/场地这张小表也推上去，家长端才能显示和教练一致的时间
+      BC.cloud.pushMeta();
+      BC.cloud.pullAll(function () { route(); });
+    }
     global.BC = BC;
   }
 

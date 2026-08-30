@@ -15,11 +15,25 @@
   var curQ = '';                    // 当前链接附带的 '?d=...' 数据（v1 嵌入方案用）
   var embeddedLessons = null;       // 家长手机无本地数据时的"课表快照"
   var snapCache = {};               // 同一链接多次渲染时，复用已解出的快照（含家长本地改动）
+  // 家长手机没有教练改过的配置，时段/场地要靠链接或云端带过来，否则会显示成默认时间
+  var parentSlots = null;
+  var parentCourts = null;
 
   /* ---------- 羽毛球头像（用姓名最后一个字当头像） ---------- */
   function avatar(name) {
     var ch = String(name || '球').slice(-1);
     return '<span class="ava">' + esc(ch) + '</span>';
+  }
+
+  /* ---------- 打不开时的提示 ---------- */
+  function renderInvalid(root) {
+    root.innerHTML = '<div class="parent">' +
+      '<div class="card parent__card">' +
+        '<div class="parent__sorry">' +
+          '<h3>链接无效</h3>' +
+          '<p class="muted">这个链接打不开了，麻烦跟教练要一个新的。</p>' +
+        '</div>' +
+      '</div></div>';
   }
 
   /* ---------- 页面入口 ---------- */
@@ -51,22 +65,34 @@
               student = p.s;
               embeddedLessons = overlayLocal(p.l || []);
               snapCache[token] = { s: student, l: embeddedLessons };
+              // 链接里打包的时段/场地也带过来，显示才和教练一致
+              if (p.sl) parentSlots = p.sl;
+              if (p.ct) parentCourts = p.ct;
             }
           } catch (e) { /* 解不开就当无效链接 */ }
         }
+      } else if (BC.cloud && BC.cloud.on()) {
+        // 接了云端：链接只带口令，数据现从云端取
+        root.innerHTML = '<div class="parent">' +
+          '<div class="card parent__card"><div class="parent__sorry">' +
+            '<h3>正在加载…</h3><p class="muted">正在获取孩子的课表，请稍等。</p>' +
+          '</div></div></div>';
+        BC.cloud.pullParent(token, function (err, data) {
+          if (err || !data || !data.student) { renderInvalid(root); return; }
+          var K = BC.store.KEYS;
+          BC.store.mergeIn(K.students, [data.student]);
+          BC.store.mergeIn(K.lessons, data.lessons || []);
+          BC.store.mergeIn(K.intake, data.intake || []);
+          BC.store.mergeIn(K.requests, data.requests || []);
+          // 用云端带过来的时段/场地，家长端显示的时间才和教练一致
+          if (data.meta) { parentSlots = data.meta.timeSlots || parentSlots; parentCourts = data.meta.courts || parentCourts; }
+          renderParent(root, token, curQ);
+        });
+        return;
       }
     }
 
-    if (!student) {
-      root.innerHTML = '<div class="parent">' +
-        '<div class="card parent__card">' +
-          '<div class="parent__sorry">' +
-            '<h3>链接无效</h3>' +
-            '<p class="muted">这个链接打不开了，麻烦跟教练要一个新的。</p>' +
-          '</div>' +
-        '</div></div>';
-      return;
-    }
+    if (!student) { renderInvalid(root); return; }
 
     var weekMonday = util.addDays(BC.rules.targetWeekMonday(), weekOffset * 7);
     var win = BC.rules.getIntakeWindow(weekMonday);
@@ -148,6 +174,17 @@
     return hit || BC.store.lessons.find(id);
   }
 
+  // 家长端查时段/场地：优先用链接或云端带过来的（教练改过的最新值），
+  // 没有才退回本机配置。这样家长看到的时间永远和教练一致。
+  function slotOf(id) {
+    var list = parentSlots || BC.config.get('schedule.timeSlots');
+    return (list || []).filter(function (s) { return s.id === id; })[0] || null;
+  }
+  function courtName(id) {
+    var list = parentCourts || BC.config.get('schedule.courts');
+    return ((list || []).filter(function (c) { return c.id === id; })[0] || {}).name || '';
+  }
+
   /* ---------- 这个孩子有哪些课等着家长确认 ---------- */
   function pendingLessons(student) {
     var today = util.todayISO();
@@ -198,7 +235,7 @@
   /* ---------- P2：填报下周可上课时间 ---------- */
   function renderFill(student, weekMonday, win, intake) {
     var cfg = BC.config.load();
-    var slots = cfg.schedule.timeSlots.filter(function (s) { return s.enabled; });
+    var slots = (parentSlots || cfg.schedule.timeSlots).filter(function (s) { return s.enabled; });
     var selected = (intake && intake.slots) ? intake.slots.slice() : [];
 
     // 一周 7 天（周一 → 周日）
@@ -273,10 +310,10 @@
       return '<div class="card parent__card">' + ui.empty('还没有排课', '教练排好课后，这里就会出现。') + '</div>';
     }
 
-    var courts = BC.config.get('schedule.courts');
+    var courts = parentCourts || BC.config.get('schedule.courts');
     var cards = mine.map(function (l) {
-      var slot = BC.rules.getSlot(l.slotId);
-      var court = (courts.filter(function (c) { return c.id === l.courtId; })[0] || {}).name || '';
+      var slot = slotOf(l.slotId);
+      var court = courtName(l.courtId);
       var state = BC.rules.confirmStateOf(l, student.id);
 
       // 这节课有没有已经提交过的申请

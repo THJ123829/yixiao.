@@ -27,6 +27,7 @@
         renderCourts() +
         renderSchemaGroups() +
         renderTexts() +
+        renderCloudSync() +
         renderDangerZone() +
       '</div>';
     bindEvents(root);
@@ -143,6 +144,24 @@
     '</section>';
   }
 
+  /* ---------- 4.5 云端同步（Supabase） ---------- */
+  function renderCloudSync() {
+    var on = BC.cloud && BC.cloud.on();
+    return '<section class="card">' +
+      '<h3 class="card__title">云端同步（Supabase）</h3>' +
+      '<p class="muted hint">' +
+        (on
+          ? '已连接 ✅ 现在家长确认/填报你这边能实时收到，家长链接也很短。下面两个按钮用于首次启用或换设备时手动对齐数据。'
+          : '还没连接。在「G · 上线与分享」里填好云端地址和密钥后，这里就能用。连接后家长确认/填报你这边实时收到，链接也变短。') +
+      '</p>' +
+      '<div class="btnrow">' +
+        '<button class="btn btn--primary" id="btn-cloud-push"' + (on ? '' : ' disabled') + '>把本机数据上传到云端</button>' +
+        '<button class="btn btn--ghost" id="btn-cloud-pull"' + (on ? '' : ' disabled') + '>从云端拉回本机</button>' +
+      '</div>' +
+      '<p class="muted hint" id="cloud-status"></p>' +
+    '</section>';
+  }
+
   /* ---------- 5. 备份与重置 ---------- */
   function renderDangerZone() {
     return '<section class="card">' +
@@ -181,6 +200,7 @@
       var slots = BC.config.get('schedule.timeSlots');
       slots.forEach(function (s) { if (s.id === id) Object.assign(s, patch); });
       BC.config.set('schedule.timeSlots', slots);
+      if (BC.cloud && BC.cloud.on()) BC.cloud.pushMeta();   // 改了时段立刻同步给家长端
     }
 
     root.querySelectorAll('[data-slot-enabled]').forEach(function (el) {
@@ -217,6 +237,7 @@
         if (slots.length <= 1) { ui.toast('至少留一个时段', 'danger'); return; }
         ui.confirm('删掉这个时段？', function () {
           BC.config.set('schedule.timeSlots', slots.filter(function (s) { return s.id !== id; }));
+          if (BC.cloud && BC.cloud.on()) BC.cloud.pushMeta();
           ui.toast('已删除');
           render(root);
         });
@@ -227,6 +248,7 @@
       var slots = BC.config.get('schedule.timeSlots');
       slots.push({ id: util.uid('slot'), label: '新时段', start: '08:00', end: '10:00', weekdays: [0, 6], enabled: true });
       BC.config.set('schedule.timeSlots', slots);
+      if (BC.cloud && BC.cloud.on()) BC.cloud.pushMeta();
       render(root);
     });
 
@@ -237,6 +259,7 @@
         var courts = BC.config.get('schedule.courts');
         courts.forEach(function (c) { if (c.id === id) c.name = el.value.trim() || c.name; });
         BC.config.set('schedule.courts', courts);
+        if (BC.cloud && BC.cloud.on()) BC.cloud.pushMeta();
         ui.toast('场地名已改');
         render(root);
       });
@@ -248,6 +271,7 @@
         if (courts.length <= 1) { ui.toast('至少留一片场地', 'danger'); return; }
         ui.confirm('删掉这片场地？', function () {
           BC.config.set('schedule.courts', courts.filter(function (c) { return c.id !== id; }));
+          if (BC.cloud && BC.cloud.on()) BC.cloud.pushMeta();
           ui.toast('已删除');
           render(root);
         });
@@ -258,7 +282,34 @@
       var courts = BC.config.get('schedule.courts');
       courts.push({ id: util.uid('court'), name: (courts.length + 1) + ' 号场' });
       BC.config.set('schedule.courts', courts);
+      if (BC.cloud && BC.cloud.on()) BC.cloud.pushMeta();
       render(root);
+    });
+
+    /* ---- 云端同步 ---- */
+    var cloudStatus = root.querySelector('#cloud-status');
+    function setCloudStatus(msg, bad) { if (cloudStatus) { cloudStatus.textContent = msg; cloudStatus.style.color = bad ? '' : ''; } }
+    var pushBtn = root.querySelector('#btn-cloud-push');
+    if (pushBtn) pushBtn.addEventListener('click', function () {
+      if (!(BC.cloud && BC.cloud.on())) { ui.toast('先在 G · 上线与分享 填好云端地址和密钥', 'danger'); return; }
+      pushBtn.disabled = true;
+      setCloudStatus('正在上传…');
+      BC.cloud.pushAll(function (err) {
+        pushBtn.disabled = false;
+        if (err) { setCloudStatus('上传失败：' + err.message); ui.toast('上传失败', 'danger'); }
+        else { setCloudStatus('已上传到云端 ✅ 家长端现在能收到你这边的更新了。'); ui.toast('已上传到云端'); }
+      });
+    });
+    var pullBtn = root.querySelector('#btn-cloud-pull');
+    if (pullBtn) pullBtn.addEventListener('click', function () {
+      if (!(BC.cloud && BC.cloud.on())) { ui.toast('先在 G · 上线与分享 填好云端地址和密钥', 'danger'); return; }
+      pullBtn.disabled = true;
+      setCloudStatus('正在拉取…');
+      BC.cloud.pullAll(function (err) {
+        pullBtn.disabled = false;
+        if (err) { setCloudStatus('拉取失败：' + err.message); ui.toast('拉取失败', 'danger'); }
+        else { setCloudStatus('已从云端拉回最新数据 ✅'); ui.toast('已拉回最新数据'); render(root); }
+      });
     });
 
     /* ---- 备份与重置 ---- */

@@ -84,9 +84,16 @@
      * baseUrl：你把工具部署到一个网址后，把那个网址填进来。
      *          这样生成的家长链接才是指向你部署地址的短链接，
      *          家长点开才进得到。留空则自动用当前打开的网址。
+     *
+     * supabaseUrl / supabaseKey：接上云端数据库后（可选，但强烈建议），
+     *   - 家长确认/填报/请假，你这边能立刻收到；你排的课家长那边也立刻出现
+     *   - 家长链接会变短（只带口令，不用再打包整份资料）
+     *   两个都留空 = 用原来的"快照链接"模式（单向，家长回传不了）。
      * ------------------------------------------------ */
     deploy: {
-      baseUrl: ''                    // 例如 https://yixiao.example.com/  （结尾斜杠可加可不加）
+      baseUrl: '',                   // 例如 https://yixiao.example.com/  （结尾斜杠可加可不加）
+      supabaseUrl: '',               // 例如 https://xxxxxxxx.supabase.co
+      supabaseKey: ''                // Supabase 的 anon public key（很长的一串）
     },
 
     /* ---------- 文案模板（F6，可随时改语气） ---------- */
@@ -182,7 +189,9 @@
     },
     {
       group: 'G · 上线与分享', items: [
-        { path: 'deploy.baseUrl', label: '部署基地址', type: 'text', help: '把工具托管到网址后，把网址填这里（如 https://yixiao.example.com/）。家长链接才会指向这个网址。留空则用当前打开的网址。' }
+        { path: 'deploy.baseUrl', label: '部署基地址', type: 'text', help: '把工具托管到网址后，把网址填这里（如 https://yixiao.example.com/）。家长链接才会指向这个网址。留空则用当前打开的网址。' },
+        { path: 'deploy.supabaseUrl', label: '云端地址（Supabase URL）', type: 'text', help: '填了才能双向同步：家长确认/填报你这边收得到，链接也会变短。留空则是单向快照模式。' },
+        { path: 'deploy.supabaseKey', label: '云端密钥（anon key）', type: 'text', help: 'Supabase 项目里 Settings → API 的 anon public 那串。只填上面不填这个也不生效。' }
       ]
     }
   ];
