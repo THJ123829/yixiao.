@@ -153,8 +153,68 @@
       // 时段/场地这张小表也推上去，家长端才能显示和教练一致的时间
       BC.cloud.pushMeta();
       BC.cloud.pullAll(function () { route(); });
+      startAutoRefresh();
     }
     global.BC = BC;
+  }
+
+  /* ---------- 教练端自动刷新 ----------
+   * 解决的问题：家长在手机上点了「确认参加」，你这边不手动刷新就看不到。
+   * 做法：每隔一段时间悄悄去云端拉一次，数据真的变了才重画页面。
+   * 几条防打扰的规矩：
+   *   · 页面切到后台（你去看微信了）就暂停，省流量省电；切回来立刻拉一次
+   *   · 只有数据真的变了才重画，不然你正在看的页面会莫名跳一下
+   *   · 正在填写表单（弹窗打开、输入框有焦点）时跳过这一轮，绝不把你打的字冲掉
+   * 间隔可在「设置」的 deploy.autoRefreshSec 改，填 0 就是关掉。 */
+  var refreshTimer = null;
+  var lastFingerprint = '';
+
+  function dataFingerprint() {
+    try {
+      var K = BC.store.KEYS;
+      // 只看会被家长改到的三张表：课表（确认状态）、填报、请假调课申请
+      return [K.lessons, K.intake, K.requests].map(function (k) {
+        return (global.localStorage.getItem(k) || '').length;
+      }).join('|') + '#' + JSON.stringify(BC.store.lessons.all().map(function (l) {
+        return l.id + ':' + (l.status || '') + ':' + Object.keys(l.confirmations || {}).length;
+      }));
+    } catch (e) { return ''; }
+  }
+
+  function busyEditing() {
+    // 有弹窗开着，或光标正在输入框里 → 这一轮别动
+    if (document.querySelector('.modal, .sheet, dialog[open]')) return true;
+    var a = document.activeElement;
+    if (!a) return false;
+    var t = (a.tagName || '').toLowerCase();
+    return t === 'input' || t === 'textarea' || t === 'select';
+  }
+
+  function tick() {
+    if (document.hidden) return;
+    if (busyEditing()) return;
+    if (/^#\/parent\//.test(global.location.hash || '')) return;
+    BC.cloud.pullAll(function (err) {
+      if (err) return;                       // 拉失败就安静等下一轮，不弹错误烦人
+      var fp = dataFingerprint();
+      if (fp && fp !== lastFingerprint) {
+        lastFingerprint = fp;
+        route();                             // 数据真变了才重画
+      }
+    });
+  }
+
+  function startAutoRefresh() {
+    var sec = BC.config.get('deploy.autoRefreshSec');
+    sec = (sec == null) ? 30 : Number(sec);
+    lastFingerprint = dataFingerprint();
+    if (refreshTimer) { global.clearInterval(refreshTimer); refreshTimer = null; }
+    if (!sec || sec < 5) return;             // 填 0（或小于 5 秒）就是关掉
+    refreshTimer = global.setInterval(tick, sec * 1000);
+    // 从后台切回前台时立刻拉一次，不用干等一个周期
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) tick();
+    });
   }
 
   if (document.readyState === 'loading') {

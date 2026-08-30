@@ -93,7 +93,14 @@
     deploy: {
       baseUrl: '',                   // 例如 https://yixiao.example.com/  （结尾斜杠可加可不加）
       supabaseUrl: '',               // 例如 https://xxxxxxxx.supabase.co
-      supabaseKey: ''                // Supabase 的 anon public key（很长的一串）
+      supabaseKey: '',               // Supabase 的 anon public key（很长的一串）
+      // 隐私字段：这几项「不上传云端」，只留在你自己手机里。
+      // 以后给学员加了新字段（studentFields），默认都会同步给家长端；
+      // 如果新字段是隐私（比如"家庭住址"），把它的 key 加到这个清单里就行。
+      noCloudFields: ['parentName', 'parentPhone', 'note'],
+      // 教练端每隔多少秒悄悄去云端看一次有没有家长新确认（0 = 关掉自动刷新）。
+      // 有变化才会重画页面；你正在填表或页面切到后台时不会打扰你。
+      autoRefreshSec: 30
     },
 
     /* ---------- 文案模板（F6，可随时改语气） ---------- */
@@ -191,7 +198,8 @@
       group: 'G · 上线与分享', items: [
         { path: 'deploy.baseUrl', label: '部署基地址', type: 'text', help: '把工具托管到网址后，把网址填这里（如 https://yixiao.example.com/）。家长链接才会指向这个网址。留空则用当前打开的网址。' },
         { path: 'deploy.supabaseUrl', label: '云端地址（Supabase URL）', type: 'text', help: '填了才能双向同步：家长确认/填报你这边收得到，链接也会变短。留空则是单向快照模式。' },
-        { path: 'deploy.supabaseKey', label: '云端密钥（anon key）', type: 'text', help: 'Supabase 项目里 Settings → API 的 anon public 那串。只填上面不填这个也不生效。' }
+        { path: 'deploy.supabaseKey', label: '云端密钥（anon key）', type: 'text', help: 'Supabase 项目里 Settings → API 的 anon public 那串。只填上面不填这个也不生效。' },
+        { path: 'deploy.autoRefreshSec', label: '家长确认自动刷新', type: 'number', unit: '秒', help: '教练端每隔多少秒悄悄去云端看一次家长有没有新确认（0 = 关掉自动刷新）。有变化才会重画页面，你正在填表或切到后台时不会打扰。' }
       ]
     }
   ];

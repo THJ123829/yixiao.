@@ -15,6 +15,8 @@
   var curQ = '';                    // 当前链接附带的 '?d=...' 数据（v1 嵌入方案用）
   var embeddedLessons = null;       // 家长手机无本地数据时的"课表快照"
   var snapCache = {};               // 同一链接多次渲染时，复用已解出的快照（含家长本地改动）
+  var cloudTried = {};              // 每个口令进页面只向云端问一次，避免反复请求
+  var lastCloudErr = '';            // 云端最后一次报的错，用来区分"连不上"和"口令不对"
   // 家长手机没有教练改过的配置，时段/场地要靠链接或云端带过来，否则会显示成默认时间
   var parentSlots = null;
   var parentCourts = null;
@@ -58,10 +60,12 @@
     // 尝试从链接里打包好的「快照」解出孩子和课表。
     embeddedLessons = null;
     if (!student) {
+      // 来源1：本机/缓存里已有这条（教练端同浏览器 / 之前解过）
       if (snapCache[token]) {
         student = snapCache[token].s;
         embeddedLessons = snapCache[token].l;
       } else if (curQ) {
+        // 来源2：链接里自带的数据快照（v1 / 云端兜底）——最稳，保证一定打得开
         var m = String(curQ).match(/d=([^&]+)/);
         if (m) {
           try {
@@ -84,15 +88,22 @@
             }
           } catch (e) { /* 解不开就当无效链接 */ }
         }
-      } else if (BC.cloud && BC.cloud.on()) {
-        // 接了云端：链接只带口令，数据现从云端取
+      }
+    }
+    // 来源3：云端。双保险——链接里的快照保证「一定打得开」，云端保证「数据是最新的」。
+    // 每个口令进页面只问云端一次；问到了就用云端覆盖快照，问不到就安静地继续用快照。
+    if (BC.cloud && BC.cloud.on() && !cloudTried[token]) {
+      cloudTried[token] = true;
+      // 只有连快照都没有（纯 token 短链接）才显示"正在加载"，否则先把快照渲染出来，秒开不白屏
+      if (!student) {
         root.innerHTML = '<div class="parent">' +
           '<div class="card parent__card"><div class="parent__sorry">' +
             '<h3>正在加载…</h3><p class="muted">正在获取孩子的课表，请稍等。</p>' +
           '</div></div></div>';
-        BC.cloud.pullParent(token, function (err, data) {
-          if (err) { renderCloudError(root, err.message); return; }
-          if (!data || !data.student) { renderInvalid(root); return; }
+      }
+      BC.cloud.pullParent(token, function (err, data) {
+        lastCloudErr = err ? (err.message || '云端读取失败') : '';
+        if (!err && data && data.student) {
           var K = BC.store.KEYS;
           BC.store.mergeIn(K.students, [data.student]);
           BC.store.mergeIn(K.lessons, data.lessons || []);
@@ -100,13 +111,21 @@
           BC.store.mergeIn(K.requests, data.requests || []);
           // 用云端带过来的时段/场地，家长端显示的时间才和教练一致
           if (data.meta) { parentSlots = data.meta.timeSlots || parentSlots; parentCourts = data.meta.courts || parentCourts; }
-          renderParent(root, token, curQ);
-        });
-        return;
-      }
+          // 云端已经写进本机库了，快照就作废，改用本机库里这份更新的
+          delete snapCache[token];
+          embeddedLessons = null;
+        }
+        renderParent(root, token, curQ);   // 重渲染：有云端数据就用云端，没有就退回快照
+      });
+      if (!student) return;   // 没有快照兜底，只能等云端回来再渲染
     }
 
-    if (!student) { renderInvalid(root); return; }
+    if (!student) {
+      // 云端开着却没拿到：区分"云端连不上/没数据"和"口令确实不对"，方便排查
+      if (BC.cloud && BC.cloud.on() && lastCloudErr) renderCloudError(root, lastCloudErr);
+      else renderInvalid(root);
+      return;
+    }
 
     var weekMonday = util.addDays(BC.rules.targetWeekMonday(), weekOffset * 7);
     var win = BC.rules.getIntakeWindow(weekMonday);

@@ -294,10 +294,44 @@
       if (!(BC.cloud && BC.cloud.on())) { ui.toast('先在 G · 上线与分享 填好云端地址和密钥', 'danger'); return; }
       pushBtn.disabled = true;
       setCloudStatus('正在上传…');
-      BC.cloud.pushAll(function (err) {
-        pushBtn.disabled = false;
-        if (err) { setCloudStatus('上传失败：' + err.message); ui.toast('上传失败', 'danger'); }
-        else { setCloudStatus('已上传到云端 ✅ 家长端现在能收到你这边的更新了。'); ui.toast('已上传到云端'); }
+      BC.cloud.pushAll(function (err, count) {
+        if (err) {
+          pushBtn.disabled = false;
+          setCloudStatus('上传失败：' + err.message);
+          ui.toast('上传失败', 'danger');
+          return;
+        }
+        if (!count) {
+          // 以前这里也报"上传成功"，其实一条都没传，最容易让人白等
+          pushBtn.disabled = false;
+          setCloudStatus('本机还没有任何学员和课程，这次没有东西要上传。先去「学员档案」加学员。');
+          ui.toast('本机没有数据可上传', 'warn');
+          return;
+        }
+        // 光"写得进去"不代表家长"读得出来"（Supabase 可能只给了写权限没给读权限）。
+        // 所以上传完立刻回头读一次验证，把结论直接说清楚，省得你以为好了、家长那边却打不开。
+        setCloudStatus('已上传 ' + count + ' 条，正在验证家长端能不能读到…');
+        BC.cloud.pushMeta(function () {
+          BC.cloud.selfCheck(function (e2, res) {
+            pushBtn.disabled = false;
+            if (res && res.readable && res.allFound) {
+              setCloudStatus('已上传 ' + count + ' 条，并且验证通过 ✅ 家长端能正常读到，去「家长链接」页可以拿到短链接了。');
+              ui.toast('上传并验证通过');
+            } else if (res && !res.readable) {
+              setCloudStatus('已上传 ' + count + ' 条，但读不回来 ⚠️ 通常是 Supabase 少给了读权限。' +
+                '去 Supabase 的 SQL Editor 跑一次：grant select, insert, update, delete on public.bc_rows to anon;' +
+                '（技术信息：' + (res.error || (e2 && e2.message) || '') + '）');
+              ui.toast('上传成功但读不回来', 'warn');
+            } else if (res && res.missing && res.missing.length) {
+              setCloudStatus('已上传 ' + count + ' 条，但云端还找不到这些孩子：' +
+                res.missing.slice(0, 5).join('、') + (res.missing.length > 5 ? ' 等' : '') + '。再点一次上传试试。');
+              ui.toast('部分数据没对上', 'warn');
+            } else {
+              setCloudStatus('已上传 ' + count + ' 条 ✅');
+              ui.toast('已上传到云端');
+            }
+          });
+        });
       });
     });
     var pullBtn = root.querySelector('#btn-cloud-pull');
