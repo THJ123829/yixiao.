@@ -565,6 +565,18 @@ textarea.input { min-height: auto; line-height: 1.55; }
 .alert--warn::before { background: var(--cork); color: #fff; }
 .alert--danger { background: var(--danger-soft); color: var(--danger); }
 .alert--danger::before { background: var(--danger); color: #fff; }
+/* 说明类（蓝）和成功类（绿）——家长链接页讲"链接为什么长/为什么短"要用 */
+.alert--info { background: var(--sky-soft); color: #075985; }
+.alert--info::before { content: 'i'; background: var(--sky); color: #fff; }
+.alert--ok { background: var(--court-soft); color: var(--court-dark); }
+.alert--ok::before { content: '\2713'; background: var(--court); color: #fff; }
+/* 这几类提示文字较多，允许换行、顶部对齐，别把小圆点图标拉变形 */
+.alert--info, .alert--ok, .alert--warn { align-items: flex-start; line-height: 1.6; }
+.alert--info::before, .alert--ok::before, .alert--warn::before { margin-top: 2px; }
+.alert code {
+  background: rgba(0, 0, 0, .06); border-radius: 4px; padding: 1px 5px;
+  font-size: 12px; word-break: break-all;
+}
 
 /* --- 填报窗口提示条 --- */
 .windowbar { font-size: 13px; padding: 9px 14px; border-radius: var(--r-sm); margin-bottom: 12px; }
