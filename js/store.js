@@ -183,8 +183,13 @@
 
     cfg: function () {
       var d = (BC.config && BC.config.get('deploy')) || {};
+      // 容错：用户可能贴 "https://xxx.supabase.co"，也可能误贴成 ".../rest/v1"。
+      // 两种都规整成纯净项目地址，避免拼出 ".../rest/v1/rest/v1/..." 这种 Supabase 会报 PGRST125 的路径。
+      var url = String(d.supabaseUrl || '').trim()
+        .replace(/\/rest\/v1\/?$/i, '')
+        .replace(/\/+$/, '');
       return {
-        url: String(d.supabaseUrl || '').replace(/\/+$/, ''),
+        url: url,
         key: String(d.supabaseKey || '').trim()
       };
     },
