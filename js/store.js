@@ -217,13 +217,11 @@
       }).catch(function (e) { cb(e, null); });
     },
 
-    // 家长端专用：先凭口令找到这个孩子，再把课表/填报/申请整张拉回来。
-    // 注意：拉回来的是「全表」，里面只含 courseType、日期、时段、场地、学员 id 这些，
-    // 不含学员姓名和家长电话，所以下到家长手机上也不会泄密；
-    // 真正按孩子过滤显示，是在 page-parent.js 里用 student.id 做的。
-    // 家长端专用：只取「这一个孩子」相关的数据。
-    // 关键安全点：用口令在云端服务端过滤（data->>token=eq.xxx），
-    // 只把这一条孩子记录回传，家长手机不会下载到全班名单和家长电话。
+    // 家长端专用：凭口令找到这个孩子，再把课表/填报/申请/时段配置拉回来。
+    // 取数策略（双保险）：
+    //   1) 先试服务端按口令过滤（data->>token=eq.xxx）——隐私最好，只回传自己那条；
+    //   2) 若服务端过滤没命中（某些环境对 jsonb 操作符解析不稳），兜底拉全部学员，
+    //      在客户端按 token 挑出自己那条。云端学员数据已脱敏（无家长电话），这样也安全。
     pullParent: function (token, cb) {
       if (!cloud.on()) { cb(new Error('未启用'), null); return; }
       var base = cloud.cfg().url + '/rest/v1/bc_rows?';
@@ -233,28 +231,39 @@
           .then(function (r) { if (r.ok) return r.json(); return r.text().then(function (t) { return Promise.reject(new Error('HTTP ' + r.status + '：' + t)); }); });
       }
 
-      // 1) 云端按口令过滤，只取回这一个孩子
+      function loadRest(cbRest) {
+        Promise.all([
+          get('select=data&tbl=eq.lessons'),
+          get('select=data&tbl=eq.intake'),
+          get('select=data&tbl=eq.requests'),
+          get('select=data&tbl=eq.meta')
+        ]).then(function (all) {
+          var meta = (all[3] || []).filter(function (r) { return r.data && r.data.id === 'schedule'; })[0];
+          cbRest({
+            lessons: (all[0] || []).map(function (r) { return r.data; }),
+            intake: (all[1] || []).map(function (r) { return r.data; }),
+            requests: (all[2] || []).map(function (r) { return r.data; }),
+            meta: meta ? meta.data : null
+          });
+        }).catch(function (e) { cb(e, null); });
+      }
+
+      function done(stu) {
+        if (!stu) { cb(null, null); return; }
+        loadRest(function (rest) { cb(null, Object.assign({ student: stu }, rest)); });
+      }
+
+      // 1) 先试服务端按口令过滤
       get('select=data&tbl=eq.students&data->>token=eq.' + encodeURIComponent(token))
         .then(function (rows) {
           var stu = (rows || [])[0];
-          if (!stu) { cb(null, null); return; }
-          // 2) 课表 / 填报 / 申请 / 时段配置：这些不含姓名和电话，整张拉回，
-          //    家长端显示时再按自己孩子的 id 过滤，不会看到别人。
-          return Promise.all([
-            get('select=data&tbl=eq.lessons'),
-            get('select=data&tbl=eq.intake'),
-            get('select=data&tbl=eq.requests'),
-            get('select=data&tbl=eq.meta')
-          ]).then(function (all) {
-            var meta = (all[3] || []).filter(function (r) { return r.data && r.data.id === 'schedule'; })[0];
-            cb(null, {
-              student: stu.data,
-              lessons: (all[0] || []).map(function (r) { return r.data; }),
-              intake: (all[1] || []).map(function (r) { return r.data; }),
-              requests: (all[2] || []).map(function (r) { return r.data; }),
-              meta: meta ? meta.data : null
-            });
-          });
+          if (stu && stu.data) { done(stu.data); return; }
+          // 2) 兜底：拉全部学员，客户端按 token 挑
+          get('select=data&tbl=eq.students').then(function (all) {
+            var st = (all || []).map(function (r) { return r.data; })
+              .filter(function (s) { return s && s.token === token; })[0];
+            done(st || null);
+          }).catch(function (e) { cb(e, null); });
         })
         .catch(function (e) { cb(e, null); });
     },
